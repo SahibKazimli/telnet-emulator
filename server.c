@@ -130,8 +130,6 @@ void socket_send_msg(int sockfd, char msg[]) {
     printf("[Server] Message sent successfully\n");
 }
 
-
-
 /**
  * Sends all bytes in the buffer over the socket
  * @param sockfd the socket to send on
@@ -224,41 +222,46 @@ int main() {
     while(1) {
         //Wait for and accept incoming client connection (blocking)
         client_socket = accept_incoming_connections(server_socket, sock_addr);
+        while(1) {
+            // Read the 4-byte length prefix
+            uint32_t net_cmd_length;
 
-        //Read message from client
-        char receive_buffer[1024] = {0};
-        int bytes_read = read(client_socket, receive_buffer, sizeof(receive_buffer));
+            // handle error, disconnect client
+            if (read_exact(client_socket, &net_cmd_length, sizeof(net_cmd_length)) < 0) {
+                printf("[Server] Client disconnected\n");
+                break;
+            }
 
-        if (bytes_read <= 0) {
-            // Disconnect client here
-            printf("[Server] Client disconnected\n");
-            break;
-        }
+            // Convert with ntohl
+            int cmd_length = ntohl(net_cmd_length);
+            printf("[Server] Size of the next message from the client will be %d bytes\n", cmd_length);
 
-        // convert length_buffer to integer
-        int cmd_length = atoi(length_buffer);
-        if (cmd_length <= 0) {
-            // Handle errors
-            printf("[Server] Invalid command length, skipping\n");
-            continue;
-        }
+            if (cmd_length <= 0) {
+                printf("[Server] Received invalid or zero length, closing client\n");
+                break;
+            }
 
-        // Allocate memory for command dynamically, since the messages obviously vary in length
-        // +1 because we need to account for null terminator
-        char *command = malloc(cmd_length + 1); 
-        if (command == NULL) {
-            perror("[Server] malloc failed");
-            break;
-        }
-        memset(command, 0, cmd_length + 1);
+            // Allocate memory for the command
+            // +1 for null terminator
+            char *command = malloc(cmd_length + 1);
+            if (command == NULL) {
+                perror("[Server] malloc failed");
+                break;
+            }
 
-        int total_bytes_read = 0;
-        // Loop to read in all bytes
-        while (total_bytes_read < cmd_length) {
-            int bytes_read = read(client_socket, command + total_bytes_read, cmd_length - total_bytes_read);
-            if (bytes_read <= 0) {
-                // handle error
-                printf("[Server] Error reading command\n");
+            // Read cmd_length bytes
+            if (read_exact(client_socket, command, cmd_length) < 0) {
+                printf("[Server] Failed to read command\n");
+                free(command);
+                break;
+            }
+            command[cmd_length] = '\0';
+            printf("[Server] Received command: %s\n", command);
+
+            // If command is exit we close the connection
+            if (strcmp(command, "exit") == 0) {
+                printf("[Server] Client sent exit command\n");
+                free(command);
                 break;
             }
             total_bytes_read += bytes_read;
