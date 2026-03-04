@@ -130,6 +130,75 @@ void socket_send_msg(int sockfd, char msg[]) {
     printf("[Server] Message sent successfully\n");
 }
 
+
+
+/**
+ * Sends all bytes in the buffer over the socket
+ * @param sockfd the socket to send on
+ * @param buffer pointer to the data to send
+ * @param length number of bytes to send
+ * @return 0 on success, -1 on error
+ */
+int send_all(int sockfd, const void *buffer, int length) {
+    int total_bytes_sent = 0;
+    while (total_bytes_sent < length) {
+        int bytes_sent = send(sockfd, (const char *)buffer + total_bytes_sent, length - total_bytes_sent, 0);
+        if (bytes_sent <= 0) {
+            perror("[Server] send failed");
+            return -1;
+        }
+        total_bytes_sent += bytes_sent;
+    }
+    return 0;
+}
+
+/**
+ * Sends a message using the length-prefixed protocol.
+ * Different CPUs store multi-byte integers differently,
+ * so we use htonl().
+ * @param sockfd the socket
+ * @param msg the message string to send
+ * @param msg_len length of the message
+ * @return 0 on success, -1 on error
+ */
+int send_length_prefixed(int sockfd, const char *msg, int msg_len) {
+    // Convert length and send it
+    uint32_t net_len = htonl(msg_len);
+    if (send_all(sockfd, &net_len, sizeof(net_len)) < 0) {
+        return -1;
+    }
+    printf("[Server] Sent length prefix: %d bytes\n", msg_len);
+
+    // Send the data
+    if (msg_len > 0) {
+        if (send_all(sockfd, msg, msg_len) < 0) {
+            return -1;
+        }
+        printf("[Server] Sent message: %.*s\n", msg_len, msg);
+    }
+    return 0;
+}
+
+/**
+ * Reads length bytes from the socket into the buffer.
+ * We loop, reading chunks until we have the expected amount.
+ * @param sockfd the socket to read from
+ * @param buffer the buffer to fill
+ * @param length number of bytes to read
+ * @return 0 on success, -1 on error or disconnect
+ */
+int read_exact(int sockfd, void *buffer, int length) {
+    int total_bytes_read = 0;
+    while (total_bytes_read < length) {
+        int bytes_read = read(sockfd, (char *)buffer + total_bytes_read, length - total_bytes_read);
+        if (bytes_read <= 0) {
+            return -1;
+        }
+        total_bytes_read += bytes_read;
+    }
+    return 0;
+}
+
 /**
  * Program entrypoint, implements a simple socket server.
  *
