@@ -158,7 +158,47 @@ int main() {
 
         //Read message from client
         char receive_buffer[1024] = {0};
-        receive_socket_msg(client_socket, receive_buffer, 1024);
+        int bytes_read = read(client_socket, receive_buffer, sizeof(receive_buffer));
+
+        if (bytes_read <= 0) {
+            // Disconnect client here
+            printf("[Server] Client disconnected\n");
+            break;
+        }
+
+        // convert length_buffer to integer
+        int cmd_length = atoi(length_buffer);
+        if (cmd_length <= 0) {
+            // Handle errors
+            printf("[Server] Invalid command length, skipping\n");
+            continue;
+        }
+
+        // Allocate memory for command dynamically, since the messages obviously vary in length
+        // +1 because we need to account for null terminator
+        char *command = malloc(cmd_length + 1); 
+        if (command == NULL) {
+            perror("[Server] malloc failed");
+            break;
+        }
+        memset(command, 0, cmd_length + 1);
+
+        int total_bytes_read = 0;
+        // Loop to read in all bytes
+        while (total_bytes_read < cmd_length) {
+            int bytes_read = read(client_socket, command + total_bytes_read, cmd_length - total_bytes_read);
+            if (bytes_read <= 0) {
+                // handle error
+                printf("[Server] Error reading command\n");
+                break;
+            }
+            total_bytes_read += bytes_read;
+        }
+        command[cmd_length] = '\0'; // I really want to make sure the null terminator is included
+        printf("[Server] Received command: %s\n", command);
+
+        // IDK what to do here right now
+        free(command)
 
         //Send response to client
         char *hello = "Hello from Stockholm/Server";
