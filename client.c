@@ -90,6 +90,50 @@ void receive_socket_msg(int client_socket, char *buffer, int buffer_size) {
     printf("[Client] Read the message: %s \n", buffer);
 }
 
+
+
+int send_all(int sockfd, const void *buffer, int length) {
+    int total_sent = 0;
+    while (total_sent < length) {
+        int bytes_sent = send(sockfd, (const char *)buffer + total_sent, length - total_sent, 0);
+        if (bytes_sent <= 0) {
+            perror("[Client] send failed");
+            return -1;
+        }
+        total_sent += bytes_sent;
+    }
+    return 0;
+}
+
+
+int send_length_prefixed(int sockfd, const char *msg, int msg_len) {
+    uint32_t net_len = htonl(msg_len);
+    if (send_all(sockfd, &net_len, sizeof(net_len)) < 0) {
+        return -1;
+    }
+    printf("[Client] Sent length prefix: %d bytes\n", msg_len);
+
+    if (msg_len > 0) {
+        if (send_all(sockfd, msg, msg_len) < 0) {
+            return -1;
+        }
+    }
+    return 0;
+}
+
+
+int read_exact(int sockfd, void *buffer, int length) {
+    int total_bytes_read = 0;
+    while (total_bytes_read < length) {
+        int bytes_read = read(sockfd, (char *)buffer + total_bytes_read, length - total_bytes_read);
+        if (bytes_read <= 0) {
+            return -1;
+        }
+        total_bytes_read += bytes_read;
+    }
+    return 0;
+}
+
 /**
  * Program entrypoint, implements a simple socket client
  *
