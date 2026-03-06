@@ -264,19 +264,38 @@ int main() {
                 free(command);
                 break;
             }
-            total_bytes_read += bytes_read;
+
+            // Execute the command using popen()
+            // popen runs the command and lets us read the output
+            FILE *fp = popen(command, "r");
+            free(command); 
+
+            if (fp == NULL) {
+                perror("[Server] popen failed");
+                char *err_msg = "Error: command execution failed\n";
+                send_length_prefixed(client_socket, err_msg, strlen(err_msg));
+                send_length_prefixed(client_socket, NULL, 0); // EOM
+                continue;
+            }
+
+            // Read output from popen and send each chunk to the client
+            char output_buffer[1024];
+            while (fgets(output_buffer, sizeof(output_buffer), fp) != NULL) {
+                int out_len = strlen(output_buffer);
+                if (send_length_prefixed(client_socket, output_buffer, out_len) < 0) {
+                    printf("[Server] Failed to send output to client\n");
+                    break;
+                }
+            }
+
+            // Send EOM, client is done
+            send_length_prefixed(client_socket, NULL, 0);
+            printf("[Server] Sent EOM (End of Message) to client\n");
+
+            pclose(fp);
         }
-        command[cmd_length] = '\0'; // I really want to make sure the null terminator is included
-        printf("[Server] Received command: %s\n", command);
 
-        // IDK what to do here right now
-        free(command)
-
-        //Send response to client
-        char *hello = "Hello from Stockholm/Server";
-        socket_send_msg(client_socket, hello);
-
-        //Close connection (note a real server would typicalyl wait until client closes the connection
+        // Client session ended
         printf("[Server] Closing the client connection and waiting for the next connection \n");
         close(client_socket);
     }
