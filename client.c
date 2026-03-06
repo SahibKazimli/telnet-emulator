@@ -156,15 +156,70 @@ int main() {
     //2. Connect to server
     connect_to_server(client_socket, server_addr);
 
-    //3. Send message to server
-    char *hello = "Hello from Enköping/Client";
-    socket_send_msg(client_socket, hello);
+    // Interactive command loop
+    // User types a command, we send it, receive output
+    char input[1024];
+    while (1) {
+        printf("> ");
+        if (fgets(input, sizeof(input), stdin) == NULL) {
+            // fgets returns NULL 
+            printf("\n");
+            break;
+        }
 
-    //4. Receive response from server
-    char receive_buffer[1024] = {0};
-    receive_socket_msg(client_socket, receive_buffer, 1024);
+        // Remove the newline character that fgets includes
+        input[strcspn(input, "\n")] = '\0';
 
-    //5. Close and Exit
+        // Skip empty input
+        if (strlen(input) == 0) {
+            continue;
+        }
+
+        // Send the command using length-prefixed protocol
+        int cmd_len = strlen(input);
+        send_length_prefixed(client_socket, input, cmd_len);
+
+        
+        if (strcmp(input, "exit") == 0) {
+            printf("[Client] Exiting...\n");
+            break;
+        }
+
+        // read chunks until EOM
+        while (1) {
+            // Read the 4-byte length prefix
+            uint32_t net_msg_length;
+            if (read_exact(client_socket, &net_msg_length, sizeof(net_msg_length)) < 0) {
+                printf("[Client] Server disconnected\n");
+                // Break out of nested loop
+                goto cleanup; 
+            }
+            int msg_length = ntohl(net_msg_length);
+
+            // EOM 
+            if (msg_length == 0) {
+                break;
+            }
+
+            // Allocate buffer for this chunk, read it, print it
+            char *msg = malloc(msg_length + 1);
+            if (msg == NULL) {
+                perror("[Client] malloc failed");
+                goto cleanup;
+            }
+
+            if (read_exact(client_socket, msg, msg_length) < 0) {
+                printf("[Client] Failed to read server response\n");
+                free(msg);
+                goto cleanup;
+            }
+            msg[msg_length] = '\0';
+            printf("%s", msg); 
+            free(msg);
+        }
+    }
+
+cleanup:
     printf("[Client] Closing the socket and exiting\n");
     close(client_socket);
     return 0;
